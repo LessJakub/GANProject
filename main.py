@@ -48,7 +48,7 @@ def main():
     #2. Go back to only 0 and 1
     gan_name = "coco"
     img_shape = (64,64,3)
-    paths_limit = 50
+    paths_limit = 5
     #seems to work on 200
     #testing 300
     text_size = 200
@@ -65,12 +65,12 @@ def main():
         if not os.path.exists(os.path.abspath('.') + annotation_folder):
             annotation_zip = tf.keras.utils.get_file('captions.zip',
                                            cache_subdir=os.path.abspath('.'),
-                                           origin='http://images.cocodataset.org/annotations/annotations_trainval2014.zip',
+                                           origin='http://images.cocodataset.org/annotations/annotations_trainval2017.zip',
                                            extract=True)
-            annotation_file = os.path.dirname(annotation_zip)+'/annotations/captions_train2014.json'
+            annotation_file = os.path.dirname(annotation_zip)+'/annotations/captions_train2017.json'
             os.remove(annotation_zip)
 
-        annotation_file = os.getcwd() +'/annotations/captions_train2014.json'
+        annotation_file = os.getcwd() +'/annotations/captions_train2017.json'
 
         # Download image files
         image_folder = '/train2014/'
@@ -89,7 +89,8 @@ def main():
         image_path_to_caption = collections.defaultdict(list)
     
         with open(annotation_file, 'r') as f:
-            annotations = json.load(f)
+            annotations = json.loads(f.read())
+            print(json.dumps(annotations['categories']))
 
         for val in annotations['annotations']:
             caption = f"<start> {val['caption']} <end>"
@@ -98,6 +99,8 @@ def main():
             image_path_to_caption[image_path].append(caption)
             #image_path_to_embedding[image_path].append(glove.encode_doc(caption))
             #print(caption)
+        for cat in annotations['categories']:
+            print(cat)
 
         image_paths = list(image_path_to_caption.keys())
         random.shuffle(image_paths)
