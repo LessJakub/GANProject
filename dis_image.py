@@ -12,11 +12,11 @@ def main():
 
     d_model = load_model('models/discriminator_models_coco/discriminator_model_0650.h5')
     #g_model.summary()
-    dataset = np.load("dataset_500.npy", allow_pickle=True)
+    dataset = np.load("dataset_50.npy", allow_pickle=True)
     n = len(sys.argv) - 1
     
     glove = GloveModel()
-    text_input_dim = 100
+    text_input_dim = 200
     glove_source_dir_path = './very_large_data'
     print("Loading glove")
     glove.load(data_dir_path=glove_source_dir_path, embedding_dim=text_input_dim)
@@ -25,8 +25,9 @@ def main():
     x.append(dataset[0][0])
     y = []
     y.append(glove.encode_doc(dataset[0][1]))
+
     z = []
-    z.append(glove.encode_doc(""))
+    z.append(glove.encode_doc("Some testing description"))
 
     x = np.array(x)
     y = np.array(y)

@@ -1,5 +1,6 @@
 #from StageOneDiscriminator import StageOneDiscriminator, define_discriminator_stage_one
 #from StageOneGenerator import StageOneGenerator, define_generator_stage_one
+from StageTwoGAN import StageTwoGAN
 from glove_loader import GloveModel
 
 
@@ -40,26 +41,22 @@ def load_image_two(image_path, img_shape=(64,64,3)):
         return img
 
 def main():
-    #IDEAS:
-    #1. Change discriminator to tanh activation
-    #        1 - Proper image
-    #        0 - Mismatched label
-    #       -1 - Wrong image wrong
-    #2. Go back to only 0 and 1
-    gan_name = "coco"
-    img_shape = (64,64,3)
+    #STAGE TWO
+    gan_name = "coco_big"
+    img_shape = (256,256,3)
     paths_limit = 50
     #seems to work on 200
     #testing 300
     text_size = 200
     latent_dim = 100
     epochs = 1000
-    batch = 64
+    batch = 8
+    generation = 850
     batch_size = int(paths_limit/5)
     dataset = []
-    train_dataset_file = 'dataset_%d.npy' % paths_limit
+    train_dataset_file = 'dataset_two_%d.npy' % paths_limit
 
-    if gan_name == "coco" and not os.path.exists(os.path.abspath('.') + "/" + train_dataset_file):
+    if not os.path.exists(os.path.abspath('.') + "/" + train_dataset_file):
         annotation_file = ""
         annotation_folder = '/annotations/'
         if not os.path.exists(os.path.abspath('.') + annotation_folder):
@@ -148,37 +145,17 @@ def main():
     print("Validation dataset shape:")
     print(np.shape(val_dataset))
 
+    ganTwo = StageTwoGAN(train_dataset, val_dataset, gan_name, text_size, latent_dim, img_shape)
+    g = load_model("models/generator_models_coco_1000/generator_model_%04d.h5" % (generation))
+    ganTwo.init_model(g)
+    ganTwo.train_two(epochs, batch)
 
-    ganOne = StageOneGAN(train_dataset, val_dataset, text_shape=text_size, latent_dim=latent_dim, image_shape=img_shape)
+    #ganOne = StageOneGAN(train_dataset, val_dataset, text_shape=text_size, latent_dim=latent_dim, image_shape=img_shape)
     #g = load_model("models/generator_models_coco/generator_model_1000.h5")
-    plt.imshow
 
-
-    ganOne.init_model()
-    ganOne.name = gan_name
-    ganOne.train_two(n_epochs=epochs, n_batch=batch)
-
-
-    #ganTwo = StageTwoGAN()
-    #ganTwo.train(img_name_vector, train_embeddings, 1000, 8)
-    #ganOne.train(img_name_vector, train_embeddings, 4000, 64, 200)
-    #ganOne.train_birds(dic, filenames, n_batch=32)
-    #dTwo = StageTwoDiscriminator()
-    #plot_model(dTwo.model, to_file='d_two_plot.png', show_shapes=True, show_layer_names=True)
-    #gTwo = StageTwoGenerator()
-    #plot_model(gTwo.model, to_file='g_two_plot.png', show_shapes=True, show_layer_names=True)
-    # #plt.savefig('images/image_at_epoch_{:d}.png'.format(1))
-    # print("Creating GAN")
-    # g_model = define_generator_stage_one(vocabulary_size, max_length)
-    # g_model.load_weights('training_weightsTMP/gen_70.h5')
-    # plot_model(g_model, to_file='g_plot.png', show_shapes=True, show_layer_names=True)
-    # d_model = define_discriminator_stage_one(vocabulary_size, max_length)
-    # d_model.load_weights('training_weightsTMP/disc_70.h5')
-    # plot_model(d_model, to_file='d_plot.png', show_shapes=True, show_layer_names=True)
-    # #gan = define_gan_stage_one
-    # train(g_model, d_model, g_opt, d_opt, img_name_train, cap_train, index_to_word, 200, 32)
-    
-
+    #ganOne.init_model()
+    #ganOne.name = gan_name
+    #ganOne.train_two(n_epochs=epochs, n_batch=batch)
 
 
 if __name__ == "__main__":
