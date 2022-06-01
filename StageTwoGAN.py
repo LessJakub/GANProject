@@ -1,41 +1,32 @@
-from re import X
-import StageOneDiscriminator as d
-import StageOneGenerator as g
-
-import tensorflow as tf
-from keras import backend as K
+from StageOneGAN import StageOneGAN
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import Input
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, LeakyReLU, Lambda, Embedding, Flatten, Conv1D
-from IPython import display
-import telegram
-from tqdm import trange
-from numpy.random import randint
-from textwrap import wrap
 from keras.models import load_model
-from glove_loader import GloveModel
-from keras.utils.vis_utils import plot_model
-import random
 import os
+from textwrap import wrap
+import random
 import numpy as np
-import time
 
+import StageOneDiscriminator as d
+import StageOneGenerator as g
+from StageTwoGenerator import StageTwoGenerator
+from StageTwoDiscriminator import StageTwoDiscriminator
+from glove_loader import GloveModel
 import matplotlib.pyplot as plt
+from numpy.random import randint
 
-#bot = telegram.Bot("5350881613:AAH9sxMdK3MDHZL_0YeP0P8PkOOHdjFF5D8")
 
-
-#def define_gan_stage_one(d_model, g_model, ca, latent_dim=100, text_shape=(24,)):
-class StageOneGAN(object):
-    def __init__(self, dataset, val_dataset, text_shape = 100, latent_dim = 100, image_shape = (64,64,3), name=""):
+class StageTwoGAN(object):
+    def __init__(self, train_dataset, val_dataset, name ="", text_shape = 100, latent_dim = 100, image_shape = (256,256,3)):
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
         self.text_shape = text_shape
         self.latent_dim = latent_dim
         self.image_shape = image_shape
-        self.train_dataset = dataset
-        self.val_dataset = val_dataset
         self.name = name
-        
+
         self.glove = GloveModel()
         text_input_dim = text_shape
         glove_source_dir_path = './very_large_data'
@@ -43,58 +34,41 @@ class StageOneGAN(object):
         self.glove.load(data_dir_path=glove_source_dir_path, embedding_dim=text_input_dim)
 
 
-    def generate_c(self, x):
-        mean = x[:, :128]
-        log_sigma = x[:, 128:]
-
-        stddev = K.exp(log_sigma)
-        epsilon = K.random_normal(shape=K.constant((mean.shape[1], ), dtype='int32'))
-        c = stddev * epsilon + mean
-
-        return c
-
-    def build_ca_model(self,):
-        input_layer = Input(shape=(self.text_shape,))
-        x = Dense(256)(input_layer)
-        #x = Embedding(100, 256)(input_layer)
-        #x = Dense(256)(x)
-        mean_logsigma = LeakyReLU(alpha=0.2)(x)
-
-        c = Lambda(self.generate_c)(mean_logsigma)
-        return Model(inputs=[input_layer], outputs=[c])
-
-    def init_model(self, g_model = None, d_model = None):
-        self.Generator = g.StageOneGenerator(self.latent_dim, self.text_shape)
-        if(g_model != None):
-            self.Generator.model = g_model
-        
-        self.Discriminator = d.StageOneDiscriminator(self.image_shape, self.text_shape)
-        if(d_model != None):
-            self.Discriminator.model = d_model
+    def init_model(self, g_one = None, d_one = None):
+        #self.stageOneGan = StageOneGAN(,text_shape, latent_dim, (int(image_shape[0]/4), int(image_shape[1]/4), int(image_shape[2])))
+        if(g_one == None):
+            print("Stage one generator not provided!")
+        else:
+            self.g_one = g_one
+        if(d_one == None):
+            print("Stage one discriminator not provided!")
+        else:
+            self.d_one = d_one
 
         inputText = Input(shape = self.text_shape)
         inputNoise = Input(shape= (self.latent_dim,))
 
-        # make weights in the discriminator not trainable
-        self.Discriminator.model.trainable = False
-        # connect them
-        
+        g_one_output = self.g_one((inputNoise, inputText))
+        #d_one_output = self.d_one((g_one_output, inputText))
 
-        x = self.Generator.model((inputNoise, inputText))
-        
-        x = self.Discriminator.model((x, inputText))
+        self.Generator = StageTwoGenerator((64,64,3), self.text_shape, self.latent_dim)
+        #self.Generator.model = load_model("generator_models/generator_model_750.h5")
+        self.Discriminator = StageTwoDiscriminator(self.image_shape, self.text_shape)
 
-        self.model = Model([inputNoise, inputText], outputs=x)
+
+        g_two_output = self.Generator.model((g_one_output, inputText))
+        d_two_output = self.Discriminator.model((g_two_output, inputText))
+
+        self.model = Model([inputNoise, inputText], outputs=d_two_output)
 
         opt = Adam(learning_rate=0.0002, beta_1=0.5)
         self.model.compile(loss='binary_crossentropy', optimizer=opt)
-        
-        plot_model(self.Generator.model, to_file='g_plot.png', show_shapes=True, show_layer_names=True)
-        plot_model(self.Discriminator.model, to_file='d_plot.png', show_shapes=True, show_layer_names=True)
-        plot_model(self.model, to_file='gan_plot.png', show_shapes=True, show_layer_names=True)
-        #return model
+        from keras.utils.vis_utils import plot_model
 
-        
+        plot_model(self.Generator.model, to_file='g_two_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(self.Discriminator.model, to_file='d_two_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(self.model, to_file='gan_two_plot.png', show_shapes=True, show_layer_names=True)
+
     # # train the generator and discriminator
     def train_two(self, n_epochs=200, n_batch=128):
         bat_per_epo = int(self.train_dataset.shape[0] / n_batch)
@@ -115,7 +89,7 @@ class StageOneGAN(object):
                     end = self.train_dataset.shape[0]
 			    # get randomly selected 'real' samples
                 #i_real = randint(start, end, half_batch)
-                i_real = random.sample(range(start, end), half_batch)
+                i_real = random.sample(range(start, end), n_batch)
                 x_real = []
                 l_real = []
                 for a in self.train_dataset[i_real]:
@@ -123,7 +97,7 @@ class StageOneGAN(object):
                     l_real.append(self.glove.encode_doc(a[1]))
                 x_real = np.array(x_real)
                 l_real = np.array(l_real)
-                y_real = np.ones((half_batch, 1))
+                y_real = np.ones((n_batch, 1))
                 
 			    # update discriminator model weights
                 self.Discriminator.model.trainable = True
@@ -139,30 +113,29 @@ class StageOneGAN(object):
                 for b in self.train_dataset[i_fake]:
                     l_fake.append(self.glove.encode_doc(b[1]))
                 l_fake = np.array(l_fake)
-                x_fake = self.Generator.model.predict((lat_points, l_fake))
+                x_one = self.g_one.predict((lat_points, l_fake))
+                x_fake = self.Generator.model.predict((x_one, l_fake))
                 y_fake = np.zeros((half_batch, 1))
 			    # update discriminator model weights
                 d_loss2, _ = self.Discriminator.model.train_on_batch((x_fake, l_fake), y_fake)
 			    # prepare points in latent space as input for the generator
 
+                #Generator creates image replicas a lot faster but some labels are mismatched
+                i_mis = random.sample(range(start, end), half_batch)
+                x_mis = []
+                l_mis = []
+                for c in i_mis:
+                    x_mis.append(self.train_dataset[c][0])
+                    of = 1
+                    while(c + of < len(self.train_dataset) and np.array_equal(self.train_dataset[c][0], self.train_dataset[c + of][0])):
+                        of += 1
+                    l_mis.append(self.glove.encode_doc(self.train_dataset[c + of][1]))
+                x_mis = np.array(x_mis)
+                l_mis = np.array(l_mis)
+                y_mis = np.zeros((half_batch, 1))
                 
-                # #Generator creates image replicas a lot faster but some labels are mismatched
-                # i_mis = random.sample(range(start, end), quarter_batch)
-                # x_mis = []
-                # l_mis = []
-                # for c in i_mis:
-                #     x_mis.append(self.train_dataset[c][0])
-                #     of = 1
-                #     while(c + of < len(self.train_dataset) and np.array_equal(self.train_dataset[c][0], self.train_dataset[c + of][0])):
-                #         of += 1
-                #     l_mis.append(self.glove.encode_doc(self.train_dataset[c + of][1]))
-                #     #l_real.append(self.glove.encode_doc(e[1]))
-                # x_mis = np.array(x_mis)
-                # l_mis = np.array(l_mis)
-                # y_mis = np.zeros((quarter_batch, 1))
-                
-                # d_loss3, _ = self.Discriminator.model.train_on_batch((x_mis, l_mis), y_mis)
-                d_loss3 = 0
+                d_loss3, _ = self.Discriminator.model.train_on_batch((x_mis, l_mis), y_mis)
+
 
 
                 self.Discriminator.model.trainable = False
@@ -170,7 +143,7 @@ class StageOneGAN(object):
 
                 #i_gan = randint(start, end, n_batch)
                 i_gan = random.sample(range(start, end), n_batch)
-                x_gan = self.Generator.generate_latent_points(n_batch)
+                lat = self.Generator.generate_latent_points(n_batch)
                 l_gan = []
                 for d in self.train_dataset[i_gan]:
                     l_gan.append(self.glove.encode_doc(d[1]))
@@ -178,8 +151,9 @@ class StageOneGAN(object):
                 l_gan = np.array(l_gan)
 			    # create inverted labels for the fake samples
                 y_gan = np.ones((n_batch, 1))
+                #x_gan = self.g_one.predict((lat, l_gan))
 			    # update the generator via the discriminator's error
-                g_loss = self.model.train_on_batch((x_gan, l_gan), y_gan)
+                g_loss = self.model.train_on_batch((lat, l_gan), y_gan)
 			    # summarize loss on this batch
                 print('>%d, %d/%d, d1=%.3f, d2=%.3f, d3=%.3f, g=%.3f' %
 			    	(i+1, j+1, bat_per_epo, d_loss1, d_loss2, d_loss3, g_loss))
@@ -187,7 +161,7 @@ class StageOneGAN(object):
                 epoch_dis_losses_real.append(d_loss1)
                 epoch_dis_losses_fake.append(d_loss2)
 		    # evaluate the model performance, sometimes
-            n = 4
+            n = 2
             samples = n * n
             i_real = randint(0, self.val_dataset.shape[0], samples)
             x_real = []
@@ -207,7 +181,8 @@ class StageOneGAN(object):
             for f in self.val_dataset[i_fake]:
                 l_fake.append(self.glove.encode_doc(f[1]))
             l_fake = np.array(l_fake)
-            x_fake = self.Generator.model.predict((lat_points, l_fake))
+            x_one = self.g_one.predict((lat_points, l_fake))
+            x_fake = self.Generator.model.predict((x_one, l_fake))
             x_fake = np.array(x_fake)
             y_fake = np.zeros((samples, 1))
             #for l in l_fake:
@@ -233,7 +208,8 @@ class StageOneGAN(object):
 
                 i_g_v = randint(0, self.val_dataset.shape[0], int(samples/2))
                 i_g_t = randint(0, self.train_dataset.shape[0], int(samples/2))
-                x_g = self.Generator.generate_latent_points(samples)
+                lat = self.Generator.generate_latent_points(samples)
+                
                 #l_c = np.array(self.val_dataset[i_g][1])
                 #split = int(len(i_g)/2)
                 l_c = []
@@ -244,9 +220,11 @@ class StageOneGAN(object):
                 l_g = []
                 for z in range(len(l_c)):
                     l_g.append(self.glove.encode_doc(l_c[z]))
-                x_g = np.array(x_g)
+               
                 l_c = np.array(l_c)
                 l_g = np.array(l_g)
+                x_g = self.g_one.predict((lat, l_g))
+                x_g = np.array(x_g)
                 imgs = self.Generator.model.predict((x_g, l_g))
                 imgs = (imgs + 1) / 2.0
                 my_dpi = 80
@@ -274,21 +252,7 @@ class StageOneGAN(object):
                 filename = path + '/generated_plot_e%04d.png' % (i + 1)
                 plt.savefig(filename)
                 plt.close()
-
-
-                fig, axes = plt.subplots(nrows=n, ncols=n)
-                #fig.title.set_text(acc_info)
-                for y in range(n):
-                    for x in range(n):
-                        axes[y,x].axis('off')
-                        axes[y,x].imshow(imgs[n*y + x])
-
-                path = "images/images" + "_" + self.name + "_not_labeld"
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
-                    os.mkdir(path)
-                filename = path + '/generated_plot_e%04d.png' % (i + 1)
-                plt.savefig(filename)
-                plt.close()
+            
 
                 plt.plot(epoch_gen_losses, label = "gen")
                 plt.plot(epoch_dis_losses_real, label = "dis_real")
@@ -314,66 +278,3 @@ class StageOneGAN(object):
                     os.mkdir(os.path.abspath('.') + "/" + path + "/")
                 plt.savefig(path + "/epoch_{}.png".format( i + 1))
                 plt.close()
-    
-
-        #x_fake, epoch, acc_info, l_fake, labels, index_to_word
-    def save_plot(self, examples, epoch, acc_info, labels, n=4):
-	    # scale from [-1,1] to [0,1]
-        examples = (examples + 1) / 2.0  
-    
-        my_dpi = 80
-        fig, axes = plt.subplots(nrows=n, ncols=n, figsize=(800/my_dpi, 800/my_dpi), dpi=my_dpi)
-        #fig.set_size_pixels(480, 480)
-    
-        for y in range(n):
-            for x in range(n):
-                axes[y,x].axis('off')
-                axes[y,x].imshow(examples[n*y + x])
-                #tmp = ' '.join([tf.compat.as_text(index_to_word(i).numpy())
-                #         for i in labels.tolist()[n*y + x] if i not in [0]])
-                #tmp =""
-                #axes[y,x].title.set_text("\n".join(wrap(tmp, 25)))
-             
-        #plt.subplots_adjust(left=0.1,
-        #            bottom=0.1, 
-        #            right=0.9, 
-        #            top=0.8, 
-        #            wspace=0.8, 
-        #            hspace=0.8)
-
-
-	    # save plot to file
-        #plt.show()
-        path = "images/"
-        filename = path + 'generated_plot_e%04d.png' % (epoch+1)
-        plt.savefig(filename)
-        #bot.sendPhoto(chat_id="5386844483", caption='Epoch: %03d' % (epoch+1) + acc_info, photo=open(filename, 'rb'))
-        plt.close()
-
-    # evaluate the discriminator, plot generated images, save generator model
-    def summarize_performance(self, imageDataset, embedingsDataset, epoch, n_samples=16):
-	    # prepare real samples
-        X_real, l_real, y_real = self.Discriminator.generate_real_samples(imageDataset, embedingsDataset, n_samples)
-        # evaluate discriminator on real examples
-
-        #l_real = ca(l_real)
-        _, acc_real = self.Discriminator.model.evaluate((X_real, l_real), y_real, verbose=0)
-        # prepare fake examples
-        x_fake, l_fake, y_fake, ix = self.Generator.generate_fake_samples(embedingsDataset, n_samples)
-        #l_fake = ca(l_fake)
-        # evaluate discriminator on fake examples
-        _, acc_fake = self.Discriminator.model.evaluate((x_fake, l_fake), y_fake, verbose=0)
-        # summarize discriminator performance
-        acc_info = '>Accuracy real: %.0f%%, fake: %.0f%%' % (acc_real*100, acc_fake*100)
-        print(acc_info)
-        # save plot
-        labels = embedingsDataset[ix]
-        self.save_plot(x_fake, epoch, acc_info, labels)
-        #l = self.Generator.generate_latent_points(100, np.shape(labels)[0])
-        #_, gen_loss = g_model.evaluate((l,labels))
-        #print(gen_loss)
-        # save the generator model tile file
-        path = "generator_models/"
-        filename = path + 'generator_model_%04d.h5' % (epoch+1)
-        self.Generator.model.save(filename)
-        #return 

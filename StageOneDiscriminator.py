@@ -2,7 +2,7 @@ from keras.layers import Concatenate
 import tensorflow as tf
 from keras.layers import Conv2D
 from keras.layers import BatchNormalization
-from keras.layers import Embedding, MaxPooling2D
+from keras.layers import Embedding, MaxPooling2D, MaxPooling1D
 from keras.layers import LeakyReLU, Activation
 from tensorflow.keras import Input
 from tensorflow.keras import Model
@@ -24,7 +24,11 @@ class StageOneDiscriminator(object):
         self.img_shape = img_shape
         self.text_shape = text_shape
         inputText = Input(shape=(text_shape,))
-        text_dense = Dense(64*64*3)(inputText)
+        #change to 64*64*3 and hope for no OOM
+        #for 1024 it works but guesses everything as 0
+        text_dense = Dense(512)(inputText)
+        #test next: text_pooling = MaxPooling1D(pool_size=2)(inputText)
+        #test next: text_dense = Dense(1024)(text_pooling)
    
 
         inputImage = Input(shape=img_shape)
@@ -53,6 +57,7 @@ class StageOneDiscriminator(object):
         x = Dense(1024)(x)
 
         combined = concatenate([x, text_dense])
+        #changed for testing, x should be combined
         y = Activation('tanh')(combined)
         y = Dense(1)(y)
         y = Activation('sigmoid')(y)

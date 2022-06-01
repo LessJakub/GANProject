@@ -6,6 +6,8 @@
 /dataset_500.npy
 /dataset_5000.npy
 /dataset_birds
+/dataset_two_50.npy
+/dataset_two_500.npy
 /GANProject.7z
 /gantutorial.ipynb
 /generator_model_040.h5
@@ -15,9 +17,6 @@
 /plots
 /plotsOn6000v1
 /stageOneGan.ipynb
-/StageTwoDiscriminator.py
-/StageTwoGAN.py
-/StageTwoGenerator.py
 /test.ipynb
 /tf_gpu.yml
 /train2014

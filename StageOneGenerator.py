@@ -27,18 +27,23 @@ class StageOneGenerator(object):
         self.latent_dim = latent_dim
         self.text_shape = text_shape
         inputNoise = Input(shape = (latent_dim,))
-        noise_dense = Dense(1024)(inputNoise)
+
+        #It seems that images are not random for 4*4*3
+        noise_dense = Dense(4*4*3)(inputNoise)
 
 
         inputText = Input(shape = (text_shape,))
-        text_dense = Dense(4*4*3)(inputText)
+        #works for 4*4*3
+        text_dense = Dense(1024)(inputText)
         combined = concatenate([noise_dense, text_dense])
+
         z = Activation('tanh')(combined)
 
-        z = Dense(4*4*128*2)(z)
+        z = Dense(4*4*128*2*2)(z)
         z = BatchNormalization()(z)
         z = Activation('tanh')(z)
-        z = Reshape((4,4,256))(z)
+        #512 works better than 256, may try to invrease this
+        z = Reshape((4,4,512))(z)
 
         z = UpSampling2D(size=(2,2))(z)
         z = Conv2D(256, kernel_size=5, padding='same')(z)
