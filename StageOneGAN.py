@@ -23,10 +23,8 @@ import time
 
 import matplotlib.pyplot as plt
 
-#bot = telegram.Bot("5350881613:AAH9sxMdK3MDHZL_0YeP0P8PkOOHdjFF5D8")
+storage_path = 'E:/GanProject'
 
-
-#def define_gan_stage_one(d_model, g_model, ca, latent_dim=100, text_shape=(24,)):
 class StageOneGAN(object):
     def __init__(self, dataset, val_dataset, text_shape = 100, latent_dim = 100, image_shape = (64,64,3), name=""):
         self.text_shape = text_shape
@@ -41,27 +39,6 @@ class StageOneGAN(object):
         glove_source_dir_path = './very_large_data'
         print("Loading glove")
         self.glove.load(data_dir_path=glove_source_dir_path, embedding_dim=text_input_dim)
-
-
-    def generate_c(self, x):
-        mean = x[:, :128]
-        log_sigma = x[:, 128:]
-
-        stddev = K.exp(log_sigma)
-        epsilon = K.random_normal(shape=K.constant((mean.shape[1], ), dtype='int32'))
-        c = stddev * epsilon + mean
-
-        return c
-
-    def build_ca_model(self,):
-        input_layer = Input(shape=(self.text_shape,))
-        x = Dense(256)(input_layer)
-        #x = Embedding(100, 256)(input_layer)
-        #x = Dense(256)(x)
-        mean_logsigma = LeakyReLU(alpha=0.2)(x)
-
-        c = Lambda(self.generate_c)(mean_logsigma)
-        return Model(inputs=[input_layer], outputs=[c])
 
     def init_model(self, g_model = None, d_model = None):
         self.Generator = g.StageOneGenerator(self.latent_dim, self.text_shape)
@@ -89,9 +66,9 @@ class StageOneGAN(object):
         opt = Adam(learning_rate=0.0002, beta_1=0.5)
         self.model.compile(loss='binary_crossentropy', optimizer=opt)
         
-        plot_model(self.Generator.model, to_file='g_plot.png', show_shapes=True, show_layer_names=True)
-        plot_model(self.Discriminator.model, to_file='d_plot.png', show_shapes=True, show_layer_names=True)
-        plot_model(self.model, to_file='gan_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(self.Generator.model, to_file=storage_path + '\g_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(self.Discriminator.model, to_file=storage_path +'\d_plot.png', show_shapes=True, show_layer_names=True)
+        plot_model(self.model, to_file=storage_path +'\gan_plot.png', show_shapes=True, show_layer_names=True)
         #return model
 
         
@@ -145,7 +122,7 @@ class StageOneGAN(object):
                 d_loss2, _ = self.Discriminator.model.train_on_batch((x_fake, l_fake), y_fake)
 			    # prepare points in latent space as input for the generator
 
-                
+                d_loss3 = 0
                 # #Generator creates image replicas a lot faster but some labels are mismatched
                 # i_mis = random.sample(range(start, end), quarter_batch)
                 # x_mis = []
@@ -162,19 +139,17 @@ class StageOneGAN(object):
                 # y_mis = np.zeros((quarter_batch, 1))
                 
                 # d_loss3, _ = self.Discriminator.model.train_on_batch((x_mis, l_mis), y_mis)
-                d_loss3 = 0
+                
 
 
                 self.Discriminator.model.trainable = False
 
 
-                #i_gan = randint(start, end, n_batch)
                 i_gan = random.sample(range(start, end), n_batch)
                 x_gan = self.Generator.generate_latent_points(n_batch)
                 l_gan = []
                 for d in self.train_dataset[i_gan]:
                     l_gan.append(self.glove.encode_doc(d[1]))
-                #x_gan = np.array(x_gan)
                 l_gan = np.array(l_gan)
 			    # create inverted labels for the fake samples
                 y_gan = np.ones((n_batch, 1))
@@ -223,11 +198,14 @@ class StageOneGAN(object):
             
 
             if((i + 1) % 10 == 0):
-                path =  "models/generator_models" + "_" + self.name + "/"
+                if not os.path.exists(storage_path):
+                    os.mkdir(storage_path)
+
+                path = storage_path + "/models/generator_models" + "_" + self.name + "/"
                 filename = path + 'generator_model_%04d.h5' % (i+1)
                 self.Generator.model.save(filename)
 
-                path = "models/discriminator_models" + "_" + self.name + "/"
+                path = storage_path + "/models/discriminator_models" + "_" + self.name + "/"
                 filename = path + 'discriminator_model_%04d.h5' % (i+1)
                 self.Discriminator.model.save(filename)
 
@@ -251,13 +229,10 @@ class StageOneGAN(object):
                 imgs = (imgs + 1) / 2.0
                 my_dpi = 80
                 fig, axes = plt.subplots(nrows=n, ncols=n, figsize=(800/my_dpi, 800/my_dpi), dpi=my_dpi)
-                #fig.title.set_text(acc_info)
                 for y in range(n):
                     for x in range(n):
                         axes[y,x].axis('off')
                         axes[y,x].imshow(imgs[n*y + x])
-                        #tmp = ' '.join([tf.compat.as_text(index_to_word(i).numpy())
-                        #     for i in labels.tolist()[n*y + x] if i not in [0]])
 
                         axes[y,x].title.set_text("\n".join(wrap("{}. {}".format(n*y + x, l_c[n*y + x]) , 25)))
              
@@ -268,8 +243,8 @@ class StageOneGAN(object):
                         wspace=0.6, 
                         hspace=0.6)
 
-                path = "images/images" + "_" + self.name
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
+                path = storage_path + "/images/images" + "_" + self.name
+                if not os.path.exists(path):
                     os.mkdir(path)
                 filename = path + '/generated_plot_e%04d.png' % (i + 1)
                 plt.savefig(filename)
@@ -277,14 +252,13 @@ class StageOneGAN(object):
 
 
                 fig, axes = plt.subplots(nrows=n, ncols=n)
-                #fig.title.set_text(acc_info)
                 for y in range(n):
                     for x in range(n):
                         axes[y,x].axis('off')
                         axes[y,x].imshow(imgs[n*y + x])
 
-                path = "images/images" + "_" + self.name + "_not_labeld"
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
+                path = storage_path + "/images/images" + "_" + self.name + "_not_labeld"
+                if not os.path.exists(path):
                     os.mkdir(path)
                 filename = path + '/generated_plot_e%04d.png' % (i + 1)
                 plt.savefig(filename)
@@ -295,12 +269,12 @@ class StageOneGAN(object):
                 plt.plot(epoch_dis_losses_fake, label = "dis_fake")
                 plt.legend(loc="upper right")
 
-                path = "plots/plots_{}/".format(self.name)
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
+                path = storage_path + "/plots/plots_{}/".format(self.name)
+                if not os.path.exists(path):
                     os.mkdir(os.path.abspath('.') + "/" + path)
 
-                path = "plots/plots_{}/loss".format(self.name)
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
+                path = storage_path + "/plots/plots_{}/loss".format(self.name)
+                if not os.path.exists(path):
                     os.mkdir(path + "/")
                 plt.savefig(path + "/epoch_{}.png".format( i + 1))
                 plt.close()
@@ -309,71 +283,8 @@ class StageOneGAN(object):
                 plt.plot(dis_acc_fake, label = "fake")
                 plt.legend(loc="upper right")
 
-                path = "plots/plots_{}/acc".format(self.name)
-                if not os.path.exists(os.path.abspath('.') + "/" + path):
-                    os.mkdir(os.path.abspath('.') + "/" + path + "/")
+                path = storage_path + "/plots/plots_{}/acc".format(self.name)
+                if not os.path.exists(path):
+                    os.mkdir(path + "/")
                 plt.savefig(path + "/epoch_{}.png".format( i + 1))
                 plt.close()
-    
-
-        #x_fake, epoch, acc_info, l_fake, labels, index_to_word
-    def save_plot(self, examples, epoch, acc_info, labels, n=4):
-	    # scale from [-1,1] to [0,1]
-        examples = (examples + 1) / 2.0  
-    
-        my_dpi = 80
-        fig, axes = plt.subplots(nrows=n, ncols=n, figsize=(800/my_dpi, 800/my_dpi), dpi=my_dpi)
-        #fig.set_size_pixels(480, 480)
-    
-        for y in range(n):
-            for x in range(n):
-                axes[y,x].axis('off')
-                axes[y,x].imshow(examples[n*y + x])
-                #tmp = ' '.join([tf.compat.as_text(index_to_word(i).numpy())
-                #         for i in labels.tolist()[n*y + x] if i not in [0]])
-                #tmp =""
-                #axes[y,x].title.set_text("\n".join(wrap(tmp, 25)))
-             
-        #plt.subplots_adjust(left=0.1,
-        #            bottom=0.1, 
-        #            right=0.9, 
-        #            top=0.8, 
-        #            wspace=0.8, 
-        #            hspace=0.8)
-
-
-	    # save plot to file
-        #plt.show()
-        path = "images/"
-        filename = path + 'generated_plot_e%04d.png' % (epoch+1)
-        plt.savefig(filename)
-        #bot.sendPhoto(chat_id="5386844483", caption='Epoch: %03d' % (epoch+1) + acc_info, photo=open(filename, 'rb'))
-        plt.close()
-
-    # evaluate the discriminator, plot generated images, save generator model
-    def summarize_performance(self, imageDataset, embedingsDataset, epoch, n_samples=16):
-	    # prepare real samples
-        X_real, l_real, y_real = self.Discriminator.generate_real_samples(imageDataset, embedingsDataset, n_samples)
-        # evaluate discriminator on real examples
-
-        #l_real = ca(l_real)
-        _, acc_real = self.Discriminator.model.evaluate((X_real, l_real), y_real, verbose=0)
-        # prepare fake examples
-        x_fake, l_fake, y_fake, ix = self.Generator.generate_fake_samples(embedingsDataset, n_samples)
-        #l_fake = ca(l_fake)
-        # evaluate discriminator on fake examples
-        _, acc_fake = self.Discriminator.model.evaluate((x_fake, l_fake), y_fake, verbose=0)
-        # summarize discriminator performance
-        acc_info = '>Accuracy real: %.0f%%, fake: %.0f%%' % (acc_real*100, acc_fake*100)
-        print(acc_info)
-        # save plot
-        labels = embedingsDataset[ix]
-        self.save_plot(x_fake, epoch, acc_info, labels)
-        #l = self.Generator.generate_latent_points(100, np.shape(labels)[0])
-        #_, gen_loss = g_model.evaluate((l,labels))
-        #print(gen_loss)
-        # save the generator model tile file
-        path = "generator_models/"
-        filename = path + 'generator_model_%04d.h5' % (epoch+1)
-        self.Generator.model.save(filename)
-        #return 

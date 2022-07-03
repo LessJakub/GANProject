@@ -6,8 +6,8 @@ import sys
 import numpy as np
 
 def main():
-    if(len(sys.argv) < 2):
-        print("Please provide at least one description")
+    if(len(sys.argv) != 2):
+        print("Please provide one description")
         return
 
     g_model = load_model('models/generator_models_coco/generator_model_0500.h5')
